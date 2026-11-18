@@ -1,0 +1,9 @@
+---
+- name: Restart slapd
+  ansible.builtin.service:
+    name: slapd
+    state: restarted
+
+- name: Apply the full ACLs via ldapmodify
+  ansible.builtin.command: ldapmodify -Q -Y EXTERNAL -H ldapi:/// -f {{ openldap_conf_dir }}/acl.ldif
+  changed_when: true

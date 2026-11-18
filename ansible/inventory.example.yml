@@ -1,0 +1,18 @@
+---
+# Copy to inventory.yml, or generate it: terraform -chdir=../terraform output -raw ansible_inventory > inventory.yml
+# Inventory names are the FQDNs the certificates, syncrepl and Kerberos use.
+all:
+  vars:
+    ansible_user: alpine
+  children:
+    infra:
+      hosts:
+        infra04.example.com:
+          ansible_host: 192.0.2.4
+          ldap_server_id: 4
+        infra05.example.com:
+          ansible_host: 192.0.2.5
+          ldap_server_id: 5
+    # Optional glibc clients (SSSD); Ubuntu/Debian and RHEL/Rocky are supported.
+    ldap_clients:
+      hosts: {}

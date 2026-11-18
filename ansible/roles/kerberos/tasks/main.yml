@@ -1,0 +1,78 @@
+---
+- name: Install MIT Kerberos with the LDAP backend
+  community.general.apk:
+    name: "{{ kerberos_packages }}"
+    state: present
+
+- name: Kerberos configuration
+  ansible.builtin.template:
+    src: krb5.conf.j2
+    dest: /etc/krb5.conf
+    mode: "0644"
+  notify: Restart Kerberos
+
+- name: KDC configuration
+  ansible.builtin.template:
+    src: kdc.conf.j2
+    dest: "{{ kerberos_kdc_dir }}/kdc.conf"
+    mode: "0644"
+  notify: Restart Kerberos
+
+- name: Kadmind ACL
+  ansible.builtin.copy:
+    dest: "{{ kerberos_kdc_dir }}/kadm5.acl"
+    content: "*/admin@{{ krb_realm }} *\n"
+    mode: "0644"
+  notify: Restart Kerberos
+
+- name: Stash KDC service LDAP password
+  ansible.builtin.shell:
+    cmd: >-
+      set -o pipefail;
+      grep -qs '^{{ kerberos_ldap_service_dn }}#' {{ kerberos_ldap_stash_file }} && exit 0;
+      printf '%s\n%s\n' '{{ kerberos_ldap_service_password }}'
+      '{{ kerberos_ldap_service_password }}' |
+      kdb5_ldap_util stashsrvpw -f {{ kerberos_ldap_stash_file }}
+      {{ kerberos_ldap_service_dn }} && echo STASHED
+  args:
+    executable: /bin/bash
+  register: stash
+  changed_when: "'STASHED' in stash.stdout"
+  vars:
+    kerberos_ldap_service_password: "{{ item.password }}"
+    kerberos_ldap_service_dn: "{{ item.dn }}"
+  loop: "{{ kerberos_services }}"
+  no_log: true
+
+- name: Create the realm in LDAP (first node)
+  ansible.builtin.command:
+    cmd: >-
+      kdb5_ldap_util -D {{ ldap_admin_dn }} -w {{ ldap_admin_password | quote }} -H ldapi:///
+      create -subtrees {{ kerberos_principal_subtree }} -sscope sub -r {{ krb_realm }}
+      -s -P {{ kerberos_master_password | quote }}
+    creates: "{{ kerberos_kdc_dir }}/.k5.{{ krb_realm }}"
+  when: inventory_hostname == kerberos_first_node
+  no_log: true
+
+- name: Stash the master key (other nodes)
+  ansible.builtin.command:
+    cmd: kdb5_util stash -P {{ kerberos_master_password | quote }}
+    creates: "{{ kerberos_kdc_dir }}/.k5.{{ krb_realm }}"
+  when: inventory_hostname != kerberos_first_node
+  no_log: true
+
+- name: Krb5kdc init script that depends on slapd
+  ansible.builtin.copy:
+    src: krb5kdc.initd
+    dest: /etc/init.d/krb5kdc
+    mode: "0755"
+  notify: Restart Kerberos
+
+- name: Start the KDC and kadmind
+  ansible.builtin.service:
+    name: "{{ item }}"
+    state: started
+    enabled: true
+  loop:
+    - krb5kdc
+    - krb5kadmind

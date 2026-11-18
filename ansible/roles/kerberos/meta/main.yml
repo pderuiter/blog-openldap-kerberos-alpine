@@ -1,0 +1,12 @@
+---
+galaxy_info:
+  role_name: kerberos
+  author: Patrick de Ruiter
+  description: "MIT Kerberos KDC and kadmind with the principal database in LDAP (kldap)"
+  license: MIT
+  min_ansible_version: "2.16"
+  platforms:
+    - name: Alpine
+      versions:
+        - all
+dependencies: []

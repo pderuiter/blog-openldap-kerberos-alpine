@@ -1,0 +1,32 @@
+---
+# Shared by debian.yml and redhat.yml
+- name: Kerberos client configuration
+  ansible.builtin.template:
+    src: krb5.conf.j2
+    dest: /etc/krb5.conf
+    mode: "0644"
+
+- name: SSSD configuration
+  ansible.builtin.template:
+    src: sssd.conf.j2
+    dest: /etc/sssd/sssd.conf
+    owner: root
+    group: root
+    mode: "0600"
+  notify: Restart sssd
+
+- name: Start SSSD
+  ansible.builtin.service:
+    name: sssd
+    state: started
+    enabled: true
+
+- name: Sshd reads authorized keys through SSSD
+  ansible.builtin.blockinfile:
+    path: /etc/ssh/sshd_config
+    marker: "# {mark} ANSIBLE MANAGED: LDAP SSH keys"
+    block: |
+      AuthorizedKeysCommand /usr/bin/sss_ssh_authorizedkeys
+      AuthorizedKeysCommandUser nobody
+    validate: /usr/sbin/sshd -t -f %s
+  notify: Restart sshd

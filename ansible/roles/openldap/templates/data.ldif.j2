@@ -1,0 +1,44 @@
+# {{ ansible_managed }}
+dn: {{ ldap_base }}
+objectClass: dcObject
+objectClass: organization
+dc: {{ ldap_base.split(',')[0].split('=')[1] }}
+o: {{ tls_organization_name }}
+
+dn: ou=People,{{ ldap_base }}
+objectClass: organizationalUnit
+ou: People
+
+dn: ou=Groups,{{ ldap_base }}
+objectClass: organizationalUnit
+ou: Groups
+
+dn: ou=Services,{{ ldap_base }}
+objectClass: organizationalUnit
+ou: Services
+
+dn: ou=SUDOers,{{ ldap_base }}
+objectClass: organizationalUnit
+ou: SUDOers
+
+{% for svc in kerberos_services %}
+dn: {{ svc.dn }}
+objectClass: organizationalRole
+objectClass: simpleSecurityObject
+cn: {{ svc.dn.split(',')[0].split('=')[1] }}
+userPassword: {CRYPT}*
+
+{% endfor %}
+dn: cn={{ ldap_admins_group }},ou=Groups,{{ ldap_base }}
+objectClass: posixGroup
+cn: {{ ldap_admins_group }}
+gidNumber: {{ ldap_admins_gid }}
+
+dn: cn=%{{ ldap_admins_group }},ou=SUDOers,{{ ldap_base }}
+objectClass: sudoRole
+cn: %{{ ldap_admins_group }}
+sudoUser: %{{ ldap_admins_group }}
+sudoHost: ALL
+sudoCommand: ALL
+sudoRunAsUser: ALL
+sudoOption: !authenticate

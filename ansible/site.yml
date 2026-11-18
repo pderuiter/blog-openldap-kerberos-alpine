@@ -1,0 +1,21 @@
+---
+- name: OpenLDAP + MIT Kerberos nodes
+  hosts: infra
+  serial: 1
+  roles:
+    - role: firewall
+    - role: base
+    - role: openldap
+
+- name: Kerberos, clients and backups on the infra nodes
+  hosts: infra
+  serial: 1
+  roles:
+    - role: kerberos
+    - role: ldap_client
+    - role: backup
+
+- name: Other LDAP clients
+  hosts: ldap_clients
+  roles:
+    - role: ldap_client

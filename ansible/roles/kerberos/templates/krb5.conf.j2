@@ -1,0 +1,29 @@
+# {{ ansible_managed }}
+[libdefaults]
+    default_realm = {{ krb_realm }}
+    dns_lookup_kdc = false
+    dns_lookup_realm = false
+
+[realms]
+    {{ krb_realm }} = {
+{% for s in ldap_servers %}
+        kdc = {{ s }}
+{% endfor %}
+        admin_server = {{ ldap_servers[0] }}
+        database_module = openldap_ldapconf
+    }
+
+[domain_realm]
+    .{{ krb_realm | lower }} = {{ krb_realm }}
+
+[dbmodules]
+    openldap_ldapconf = {
+        db_library = kldap
+        ldap_kerberos_container_dn = {{ kerberos_container_dn }}
+        ldap_kdc_dn = {{ kerberos_services[0].dn }}
+        ldap_kadmind_dn = {{ kerberos_services[1].dn }}
+        ldap_service_password_file = {{ kerberos_ldap_stash_file }}
+        ldap_servers = {% for s in ldap_servers %}ldaps://{{ s }}{{ ' ' if not loop.last else '' }}{% endfor %}
+
+        ldap_conns_per_server = 5
+    }

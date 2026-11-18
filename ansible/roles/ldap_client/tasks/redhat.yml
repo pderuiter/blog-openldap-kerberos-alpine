@@ -1,0 +1,45 @@
+---
+- name: Install SSSD
+  ansible.builtin.dnf:
+    name:
+      - sssd-ldap
+      - sssd-krb5
+      - sssd-tools
+      - krb5-workstation
+      - openldap-clients
+      - authselect
+      - oddjob-mkhomedir
+      - sudo
+      - openssh-server
+    state: present
+
+- name: Trust the organization CA
+  ansible.builtin.copy:
+    src: "{{ ca_cert_local_path }}"
+    dest: "{{ ldap_client_ca_redhat }}"
+    mode: "0644"
+  notify:
+    - Update the RHEL CA store
+    - Restart sssd
+
+- name: Check the active authselect profile
+  ansible.builtin.command: authselect current --raw
+  register: ldap_client_authselect
+  changed_when: false
+  failed_when: false
+
+- name: Select the SSSD profile with sudo and mkhomedir
+  ansible.builtin.command: authselect select sssd with-sudo with-mkhomedir --force
+  when: ldap_client_authselect.stdout.split() | sort != ['sssd', 'with-mkhomedir', 'with-sudo']
+  changed_when: true
+
+- name: Start oddjobd (mkhomedir)
+  ansible.builtin.service:
+    name: oddjobd
+    state: started
+    enabled: true
+
+- name: SSSD and sshd configuration
+  ansible.builtin.include_tasks: sssd.yml
+  vars:
+    ldap_client_ca_path: "{{ ldap_client_ca_redhat }}"

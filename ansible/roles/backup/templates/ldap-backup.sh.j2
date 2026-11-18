@@ -1,0 +1,16 @@
+#!/bin/sh
+# {{ ansible_managed }}
+# Daily backup: LDAP data and OLC config as LDIF, Kerberos stash files and
+# principal list, system configuration. Keeps {{ backup_retention_days }} days.
+set -eu
+umask 077
+dest="{{ backup_dir }}/$(date +%Y%m%d)"
+mkdir -p "$dest"
+
+slapcat -n1 -F {{ openldap_config_dir | default('/etc/openldap/slapd.d') }} -l "$dest/data.ldif"
+slapcat -n0 -F {{ openldap_config_dir | default('/etc/openldap/slapd.d') }} -l "$dest/config.ldif"
+tar -czf "$dest/krb5kdc.tar.gz" -C /var/lib krb5kdc
+kadmin.local -q listprincs > "$dest/principals.txt"
+tar -czf "$dest/config-files.tar.gz" {{ backup_config_files | join(' ') }} 2>/dev/null || true
+
+find {{ backup_dir }} -mindepth 1 -maxdepth 1 -type d -mtime +{{ backup_retention_days }} -exec rm -rf {} +

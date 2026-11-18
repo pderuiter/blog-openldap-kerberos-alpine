@@ -1,0 +1,7 @@
+#!/bin/sh
+# {{ ansible_managed }}
+USER="$1"
+ldapsearch -x -H "{{ ldap_client_uris | join(' ') }}" \
+  -b "ou=People,{{ ldap_base }}" \
+  "(uid=${USER})" sshPublicKey 2>/dev/null | \
+  sed -n '/^sshPublicKey:/{s/^sshPublicKey: //;:a;N;s/\n //;ta;P;D}'

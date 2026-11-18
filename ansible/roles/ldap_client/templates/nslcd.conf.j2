@@ -1,0 +1,9 @@
+# {{ ansible_managed }}
+uid nslcd
+gid nslcd
+uri {{ ldap_client_uris | join(' ') }}
+base {{ ldap_base }}
+base passwd ou=People,{{ ldap_base }}
+base group ou=Groups,{{ ldap_base }}
+tls_cacertfile {{ tls_key_dir }}/ca.crt
+tls_reqcert demand

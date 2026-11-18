@@ -1,0 +1,9 @@
+---
+kerberos_packages:
+  - krb5
+  - krb5-server
+  - krb5-server-ldap
+kerberos_kdc_dir: /var/lib/krb5kdc
+kerberos_container_dn: "cn=krbContainer,{{ ldap_base }}"
+kerberos_principal_subtree: "ou=People,{{ ldap_base }}"
+kerberos_first_node: "{{ ldap_servers[0] }}"

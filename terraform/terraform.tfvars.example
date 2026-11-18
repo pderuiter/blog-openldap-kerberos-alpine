@@ -1,0 +1,19 @@
+proxmox_endpoint  = "https://pve.example.com:8006/"
+proxmox_api_token = "terraform@pve!blog=00000000-0000-0000-0000-000000000000"
+proxmox_insecure  = false
+node_name         = "pve"
+
+gateway        = "192.0.2.1"
+domain         = "example.com"
+ssh_public_key = "ssh-ed25519 AAAA... you@example.com"
+
+vms = {
+  infra04 = {
+    ipv4_address   = "192.0.2.4/24"
+    ldap_server_id = 4
+  }
+  infra05 = {
+    ipv4_address   = "192.0.2.5/24"
+    ldap_server_id = 5
+  }
+}

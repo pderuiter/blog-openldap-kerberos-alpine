@@ -1,0 +1,7 @@
+---
+# reload re-applies /etc/nftables.nft; restart would run "nft flush ruleset"
+# on stop and drop every other table on the host as well.
+- name: Reload nftables
+  ansible.builtin.service:
+    name: nftables
+    state: reloaded

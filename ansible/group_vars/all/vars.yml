@@ -1,0 +1,38 @@
+---
+# Directory and realm
+ldap_base: dc=example,dc=com
+ldap_admin_dn: "cn=admin,{{ ldap_base }}"
+ldap_admin_password: "{{ vault_ldap_admin_password }}"
+krb_realm: EXAMPLE.COM
+
+# The LDAP/KDC nodes, in order. The first one loads the initial data and creates the realm.
+ldap_servers: "{{ groups['infra'] }}"
+
+# Per-host names used in the certificates (the inventory name is the FQDN)
+fqdn: "{{ inventory_hostname }}"
+hostname: "{{ inventory_hostname.split('.')[0] }}"
+network_ip: "{{ ansible_facts['default_ipv4']['address'] }}"
+# olcServerID, unique per node; defaults to the position in ldap_servers (1, 2, ...)
+ldap_server_id: "{{ ldap_servers.index(inventory_hostname) + 1 }}"
+
+# Organization CA, created on the control node (kept out of git, see .gitignore)
+ca_dir_local: "{{ playbook_dir }}/files/ca"
+ca_cert_local_path: "{{ ca_dir_local }}/ca.crt"
+ca_key_local_path: "{{ ca_dir_local }}/ca.key"
+secret_ca_passphrase: "{{ vault_ca_passphrase }}"
+ca_cert_validity: "+825d"
+tls_organization_name: Example Org
+tls_key_dir: /etc/ssl/ldap
+
+# Kerberos
+kerberos_master_password: "{{ vault_kerberos_master_password }}"
+kerberos_ldap_stash_file: /var/lib/krb5kdc/service.keyfile
+kerberos_services:
+  - dn: "cn=kdc-service,ou=Services,{{ ldap_base }}"
+    password: "{{ vault_kdc_service_password }}"
+  - dn: "cn=kadmin-service,ou=Services,{{ ldap_base }}"
+    password: "{{ vault_kadmin_service_password }}"
+
+# POSIX group that gets sudo (local drop-in on Alpine, sudoRole in LDAP for SSSD clients)
+ldap_admins_group: admins
+ldap_admins_gid: 10000

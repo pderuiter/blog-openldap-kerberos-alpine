@@ -1,0 +1,13 @@
+---
+base_packages:
+  - chrony
+  - py3-cryptography
+  - openssl
+  - ca-certificates
+  - openldap
+  - openldap-clients
+  - bash
+# Kerberos needs synchronized clocks. Disable only where the clock is managed
+# for you (containers).
+base_chrony_enabled: true
+base_manage_hostname: true

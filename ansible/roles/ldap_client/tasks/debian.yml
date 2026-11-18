@@ -1,0 +1,54 @@
+---
+- name: Install SSSD
+  ansible.builtin.apt:
+    name:
+      - sssd-ldap
+      - sssd-krb5
+      - sssd-tools
+      - libnss-sss
+      - libpam-sss
+      - libsss-sudo
+      - krb5-user
+      - ldap-utils
+      - sudo
+      - openssh-server
+      - ca-certificates
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Trust the organization CA
+  ansible.builtin.copy:
+    src: "{{ ca_cert_local_path }}"
+    dest: "{{ ldap_client_ca_debian }}"
+    mode: "0644"
+  notify:
+    - Update the Debian CA store
+    - Restart sssd
+
+- name: NSS uses SSSD for users, groups and sudo rules
+  ansible.builtin.lineinfile:
+    path: /etc/nsswitch.conf
+    regexp: "^{{ item.db }}:"
+    line: "{{ item.db }}: {{ item.sources }}"
+  loop:
+    - { db: passwd, sources: files systemd sss }
+    - { db: group, sources: files systemd sss }
+    - { db: shadow, sources: files sss }
+    - { db: sudoers, sources: files sss }
+
+- name: Check whether pam_mkhomedir is enabled
+  ansible.builtin.command: grep -q pam_mkhomedir /etc/pam.d/common-session
+  register: ldap_client_mkhomedir
+  changed_when: false
+  failed_when: false
+
+- name: Create home directories on first login
+  ansible.builtin.command: pam-auth-update --enable mkhomedir
+  when: ldap_client_mkhomedir.rc != 0
+  changed_when: true
+
+- name: SSSD and sshd configuration
+  ansible.builtin.include_tasks: sssd.yml
+  vars:
+    ldap_client_ca_path: "{{ ldap_client_ca_debian }}"

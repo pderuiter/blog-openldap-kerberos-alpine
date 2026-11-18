@@ -1,0 +1,18 @@
+---
+backup_dir: /var/backups/ldap
+backup_retention_days: 30
+backup_hour: "2"
+backup_minute: "0"
+backup_script: /usr/local/bin/ldap-backup
+backup_config_files:
+  - /etc/openldap
+  - /etc/krb5.conf
+  - /var/lib/krb5kdc/kdc.conf
+  - /var/lib/krb5kdc/kadm5.acl
+  - /etc/nslcd.conf
+  - /etc/nsswitch.conf
+  - /etc/sudoers.d
+  - /etc/nftables.nft
+  - /etc/conf.d/slapd
+  - /etc/init.d/krb5kdc
+  - /etc/init.d/nscd

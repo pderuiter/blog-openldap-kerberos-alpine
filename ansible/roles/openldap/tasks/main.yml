@@ -1,0 +1,163 @@
+---
+- name: Install OpenLDAP
+  community.general.apk:
+    name: "{{ openldap_packages }}"
+    state: present
+
+- name: Run slapd from cn=config and listen on ldap, ldaps and ldapi
+  ansible.builtin.copy:
+    dest: /etc/conf.d/slapd
+    content: |
+      # Managed by Ansible
+      cfgdir="{{ openldap_config_dir }}"
+      listen_uris="{{ openldap_listen_uris }}"
+    mode: "0644"
+  notify: Restart slapd
+
+- name: Bootstrap LDIF
+  ansible.builtin.template:
+    src: config-bootstrap.ldif.j2
+    dest: "{{ openldap_conf_dir }}/config-bootstrap.ldif"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+
+- name: Custom schema LDIFs
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "{{ openldap_conf_dir }}/schema/{{ item }}"
+    mode: "0644"
+  loop:
+    - openssh-lpk.ldif
+    - sudoers.ldif
+
+- name: Check for an existing OLC configuration
+  ansible.builtin.stat:
+    path: "{{ openldap_config_dir }}/cn=config.ldif"
+  register: olc_config
+
+- name: OLC directory
+  ansible.builtin.file:
+    path: "{{ openldap_config_dir }}"
+    state: directory
+    owner: ldap
+    group: ldap
+    mode: "0750"
+
+- name: Bootstrap OLC config via slapadd
+  ansible.builtin.shell:
+    cmd: >-
+      set -o pipefail;
+      slapadd -n0 -F {{ openldap_config_dir }}
+      -l {{ openldap_conf_dir }}/config-bootstrap.ldif 2>&1 | cat -v
+  args:
+    executable: /bin/bash
+  when: not olc_config.stat.exists
+  environment:
+    LC_ALL: C
+  changed_when: true
+
+- name: Load the Kerberos, openssh-lpk and sudoers schemas via slapadd
+  ansible.builtin.shell:
+    cmd: >-
+      set -o pipefail;
+      slapadd -n0 -F {{ openldap_config_dir }} -l {{ item.file }} 2>&1 | cat -v
+    creates: "{{ openldap_config_dir }}/cn=config/cn=schema/cn={{ '{' }}{{ item.idx }}{{ '}' }}{{ item.name }}.ldif"
+  args:
+    executable: /bin/bash
+  environment:
+    LC_ALL: C
+  loop:
+    - { idx: 4, name: kerberos, file: /usr/share/kerberos/kerberos.openldap.ldif }
+    - { idx: 5, name: openssh-lpk, file: "{{ openldap_conf_dir }}/schema/openssh-lpk.ldif" }
+    - { idx: 6, name: sudo, file: "{{ openldap_conf_dir }}/schema/sudoers.ldif" }
+
+- name: Initial directory data (first node only; the others get it via syncrepl)
+  when: inventory_hostname == openldap_first_node
+  block:
+    - name: Data LDIF
+      ansible.builtin.template:
+        src: data.ldif.j2
+        dest: "{{ openldap_conf_dir }}/data.ldif"
+        mode: "0600"
+
+    - name: Load initial data via slapadd -n1
+      ansible.builtin.shell:
+        cmd: >-
+          slapadd -n1 -F {{ openldap_config_dir }} -l {{ openldap_conf_dir }}/data.ldif
+          && touch /var/lib/openldap/.data-loaded
+        creates: /var/lib/openldap/.data-loaded
+
+- name: Ownership of the configuration and data
+  ansible.builtin.file:
+    path: "{{ item }}"
+    owner: ldap
+    group: ldap
+    recurse: true
+  loop:
+    - "{{ openldap_config_dir }}"
+    - "{{ openldap_data_dir }}"
+
+- name: Directory for the ldapi socket
+  ansible.builtin.file:
+    path: /var/lib/openldap/run
+    state: directory
+    owner: ldap
+    group: ldap
+    mode: "0755"
+
+- name: Start slapd
+  ansible.builtin.service:
+    name: slapd
+    state: started
+    enabled: true
+
+- name: Full ACL LDIF
+  ansible.builtin.template:
+    src: acl.ldif.j2
+    dest: "{{ openldap_conf_dir }}/acl.ldif"
+    mode: "0600"
+  notify: Apply the full ACLs via ldapmodify
+
+- name: Check the rootDN password
+  ansible.builtin.command: >-
+    ldapwhoami -x -H ldapi:/// -D {{ ldap_admin_dn }} -w {{ ldap_admin_password | quote }}
+  register: openldap_rootpw_check
+  changed_when: false
+  failed_when: false
+  no_log: true
+
+- name: Set the rootDN password
+  ansible.builtin.shell:
+    cmd: >-
+      set -o pipefail;
+      printf 'dn: olcDatabase={1}mdb,cn=config\nchangetype: modify\nreplace: olcRootPW\nolcRootPW: %s\n'
+      "$(slappasswd -s {{ ldap_admin_password | quote }})"
+      | ldapmodify -Q -Y EXTERNAL -H ldapi:///
+  args:
+    executable: /bin/bash
+  when: openldap_rootpw_check.rc != 0
+  changed_when: true
+  no_log: true
+
+- name: Service account passwords (first node; replicated)
+  when: inventory_hostname == openldap_first_node
+  block:
+    - name: Check the service account passwords
+      ansible.builtin.command: >-
+        ldapwhoami -x -H ldapi:/// -D {{ item.dn | quote }} -w {{ item.password | quote }}
+      loop: "{{ kerberos_services }}"
+      register: openldap_svc_check
+      changed_when: false
+      failed_when: false
+      no_log: true
+
+    - name: Set the service account passwords
+      ansible.builtin.command: >-
+        ldappasswd -x -H ldapi:/// -D {{ ldap_admin_dn }} -w {{ ldap_admin_password | quote }}
+        -s {{ item.item.password | quote }} {{ item.item.dn | quote }}
+      loop: "{{ openldap_svc_check.results }}"
+      when: item.rc != 0
+      changed_when: true
+      no_log: true

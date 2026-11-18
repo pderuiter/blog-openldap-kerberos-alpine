@@ -1,0 +1,68 @@
+---
+- name: Install nslcd, musl-nscd and sudo
+  community.general.apk:
+    name:
+      - nss-pam-ldapd
+      - musl-nscd
+      - sudo
+      - openssh-server
+    state: present
+
+- name: Nslcd configuration
+  ansible.builtin.template:
+    src: nslcd.conf.j2
+    dest: /etc/nslcd.conf
+    owner: root
+    group: nslcd
+    mode: "0640"
+  notify: Restart nslcd
+
+- name: Nsswitch.conf (musl resolves local files itself, so only ldap)
+  ansible.builtin.copy:
+    dest: /etc/nsswitch.conf
+    content: |
+      passwd: ldap
+      group: ldap
+      shadow: ldap
+    mode: "0644"
+  notify: Restart nscd
+
+- name: Nscd init script with hard dependencies
+  ansible.builtin.template:
+    src: nscd.initd.j2
+    dest: /etc/init.d/nscd
+    mode: "0755"
+
+- name: Start nslcd and nscd
+  ansible.builtin.service:
+    name: "{{ item }}"
+    state: started
+    enabled: true
+  loop:
+    - nslcd
+    - nscd
+
+- name: SSH public key lookup script
+  ansible.builtin.template:
+    src: ldap-ssh-keys.j2
+    dest: "{{ ldap_client_ssh_keys_script }}"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Sshd reads authorized keys from LDAP
+  ansible.builtin.blockinfile:
+    path: /etc/ssh/sshd_config
+    marker: "# {mark} ANSIBLE MANAGED: LDAP SSH keys"
+    block: |
+      AuthorizedKeysCommand {{ ldap_client_ssh_keys_script }} %u
+      AuthorizedKeysCommandUser nobody
+    validate: /usr/sbin/sshd -t -f %s
+  notify: Restart sshd
+
+- name: Sudo for the LDAP admins group (Alpine's sudo has no LDAP support)
+  ansible.builtin.copy:
+    dest: /etc/sudoers.d/ldap-admins
+    content: "%{{ ldap_admins_group }} ALL=(ALL) NOPASSWD: ALL\n"
+    mode: "0440"
+    validate: visudo -cf %s

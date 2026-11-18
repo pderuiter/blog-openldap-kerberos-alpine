@@ -1,0 +1,5 @@
+---
+# Ports from the post: SSH, LDAP, LDAPS, Kerberos, kadmin
+firewall_tcp_ports: [22, 389, 636, 88, 749]
+firewall_udp_ports: [88]
+firewall_config: /etc/nftables.nft

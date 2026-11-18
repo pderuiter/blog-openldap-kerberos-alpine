@@ -1,0 +1,10 @@
+---
+ldap_client_uris: "{{ ldap_servers | map('regex_replace', '^', 'ldaps://') | list }}"
+ldap_client_ssh_keys_script: /usr/local/bin/ldap-ssh-keys
+# Hard OpenRC dependencies of nscd on Alpine. On the LDAP nodes themselves
+# nscd must also wait for slapd, or it hangs lookups (and logins) at boot.
+ldap_client_nscd_needs: "{{ ['nslcd'] + (['slapd'] if inventory_hostname in ldap_servers else []) }}"
+# glibc clients (SSSD)
+ldap_client_sssd_domain: "{{ krb_realm | lower }}"
+ldap_client_ca_debian: /usr/local/share/ca-certificates/ldap-org-ca.crt
+ldap_client_ca_redhat: /etc/pki/ca-trust/source/anchors/ldap-org-ca.crt

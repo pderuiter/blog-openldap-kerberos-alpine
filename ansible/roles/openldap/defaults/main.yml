@@ -1,0 +1,13 @@
+---
+openldap_config_dir: /etc/openldap/slapd.d
+openldap_conf_dir: /etc/openldap
+openldap_data_dir: /var/lib/openldap/openldap-data
+openldap_listen_uris: "ldap:/// ldaps:/// ldapi:///"
+openldap_packages:
+  - openldap
+  - openldap-back-mdb
+  - openldap-clients
+  - openldap-overlay-syncprov
+  - krb5-server-ldap
+openldap_first_node: "{{ ldap_servers[0] }}"
+openldap_peers: "{{ ldap_servers | difference([inventory_hostname]) }}"

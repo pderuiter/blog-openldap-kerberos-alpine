@@ -1,0 +1,31 @@
+---
+- name: Backup directory
+  ansible.builtin.file:
+    path: "{{ backup_dir }}"
+    state: directory
+    mode: "0700"
+
+- name: Backup script
+  ansible.builtin.template:
+    src: ldap-backup.sh.j2
+    dest: "{{ backup_script }}"
+    mode: "0700"
+
+- name: Install the crond service (busybox-openrc)
+  community.general.apk:
+    name: busybox-openrc
+    state: present
+
+- name: Start crond
+  ansible.builtin.service:
+    name: crond
+    state: started
+    enabled: true
+
+- name: Daily backup at 02:00
+  ansible.builtin.cron:
+    name: ldap-backup
+    hour: "{{ backup_hour }}"
+    minute: "{{ backup_minute }}"
+    job: "{{ backup_script }}"
+    user: root

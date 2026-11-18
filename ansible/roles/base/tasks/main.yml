@@ -1,0 +1,132 @@
+---
+- name: Install base packages
+  community.general.apk:
+    name: "{{ base_packages }}"
+    state: present
+    update_cache: true
+
+- name: Set the hostname
+  ansible.builtin.hostname:
+    name: "{{ fqdn }}"
+    use: alpine
+  when: base_manage_hostname | bool
+
+- name: Start chrony
+  ansible.builtin.service:
+    name: chronyd
+    state: started
+    enabled: true
+  when: base_chrony_enabled | bool
+
+- name: Create the TLS directory
+  ansible.builtin.file:
+    path: "{{ tls_key_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Organization CA on the control node
+  delegate_to: localhost
+  become: false
+  run_once: true
+  block:
+    - name: CA directory
+      ansible.builtin.file:
+        path: "{{ ca_dir_local }}"
+        state: directory
+        mode: "0700"
+
+    - name: CA private key
+      community.crypto.openssl_privatekey:
+        path: "{{ ca_key_local_path }}"
+        passphrase: "{{ secret_ca_passphrase }}"
+        cipher: auto
+        mode: "0600"
+
+    - name: CA signing request
+      community.crypto.openssl_csr_pipe:
+        privatekey_path: "{{ ca_key_local_path }}"
+        privatekey_passphrase: "{{ secret_ca_passphrase }}"
+        common_name: "{{ tls_organization_name }} CA"
+        organization_name: "{{ tls_organization_name }}"
+        basic_constraints: ["CA:TRUE"]
+        basic_constraints_critical: true
+        key_usage: [keyCertSign, cRLSign]
+        key_usage_critical: true
+      register: base_ca_csr
+      changed_when: false
+
+    - name: CA certificate
+      community.crypto.x509_certificate:
+        path: "{{ ca_cert_local_path }}"
+        csr_content: "{{ base_ca_csr.csr }}"
+        privatekey_path: "{{ ca_key_local_path }}"
+        privatekey_passphrase: "{{ secret_ca_passphrase }}"
+        provider: selfsigned
+        selfsigned_not_after: "+3650d"
+        mode: "0644"
+
+- name: Host private key
+  community.crypto.openssl_privatekey:
+    path: "{{ tls_key_dir }}/{{ hostname }}.key"
+    owner: root
+    group: ldap
+    mode: "0640"
+
+- name: Generate certificate signing request
+  community.crypto.openssl_csr_pipe:
+    privatekey_path: "{{ tls_key_dir }}/{{ hostname }}.key"
+    common_name: "{{ fqdn }}"
+    organization_name: "{{ tls_organization_name }}"
+    subject_alt_name:
+      - "DNS:localhost"
+      - "DNS:{{ hostname }}"
+      - "DNS:{{ fqdn }}"
+      - "IP:{{ network_ip }}"
+    extended_key_usage:
+      - serverAuth
+  register: csr
+  changed_when: false
+
+- name: Read existing certificate
+  ansible.builtin.slurp:
+    src: "{{ tls_key_dir }}/{{ hostname }}.crt"
+  register: existing_cert
+  failed_when: false
+
+- name: Sign certificate with organization CA
+  community.crypto.x509_certificate_pipe:
+    csr_content: "{{ csr.csr }}"
+    content: "{{ existing_cert.content | default('') | b64decode or omit }}"
+    provider: ownca
+    ownca_path: "{{ ca_cert_local_path }}"
+    ownca_privatekey_path: "{{ ca_key_local_path }}"
+    ownca_privatekey_passphrase: "{{ secret_ca_passphrase }}"
+    ownca_not_after: "{{ ca_cert_validity }}"
+    ownca_not_before: "-1d"
+  delegate_to: localhost
+  become: false
+  register: certificate
+
+- name: Deploy the host certificate
+  ansible.builtin.copy:
+    content: "{{ certificate.certificate }}"
+    dest: "{{ tls_key_dir }}/{{ hostname }}.crt"
+    mode: "0644"
+  notify: Restart slapd
+
+- name: Deploy the CA certificate
+  ansible.builtin.copy:
+    src: "{{ ca_cert_local_path }}"
+    dest: "{{ tls_key_dir }}/ca.crt"
+    mode: "0644"
+
+- name: Client defaults for the OpenLDAP tools (trust the organization CA)
+  ansible.builtin.copy:
+    dest: /etc/openldap/ldap.conf
+    content: |
+      # Managed by Ansible
+      BASE {{ ldap_base }}
+      URI {% for s in ldap_servers %}ldaps://{{ s }}{{ ' ' if not loop.last else '' }}{% endfor %}
+
+      TLS_CACERT {{ tls_key_dir }}/ca.crt
+    mode: "0644"

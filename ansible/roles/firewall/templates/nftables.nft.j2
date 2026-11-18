@@ -1,0 +1,29 @@
+#!/usr/sbin/nft -f
+# {{ ansible_managed }}
+# Replace only this table, leave other tables (container runtimes, fail2ban) alone.
+table inet filter
+delete table inet filter
+
+table inet filter {
+    chain input {
+        type filter hook input priority 0; policy drop;
+
+        # Accept rules go in the chain itself, ahead of the policy; rules
+        # appended after a drop rule are never reached.
+        ct state established,related accept
+        ct state invalid drop
+        iif "lo" accept
+        meta l4proto { icmp, ipv6-icmp } accept
+
+        tcp dport { {{ firewall_tcp_ports | join(', ') }} } accept
+        udp dport { {{ firewall_udp_ports | join(', ') }} } accept
+    }
+
+    chain forward {
+        type filter hook forward priority 0; policy drop;
+    }
+
+    chain output {
+        type filter hook output priority 0; policy accept;
+    }
+}

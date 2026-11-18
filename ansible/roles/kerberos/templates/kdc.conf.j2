@@ -1,0 +1,6 @@
+# {{ ansible_managed }}
+[realms]
+    {{ krb_realm }} = {
+        acl_file = {{ kerberos_kdc_dir }}/kadm5.acl
+        key_stash_file = {{ kerberos_kdc_dir }}/.k5.{{ krb_realm }}
+    }

@@ -1,0 +1,21 @@
+---
+galaxy_info:
+  role_name: ldap_client
+  author: Patrick de Ruiter
+  description: "LDAP users, groups, SSH keys and sudo: nslcd + musl-nscd on Alpine, SSSD on Debian/Ubuntu and RHEL"
+  license: MIT
+  min_ansible_version: "2.16"
+  platforms:
+    - name: Alpine
+      versions:
+        - all
+    - name: Ubuntu
+      versions:
+        - noble
+    - name: Debian
+      versions:
+        - bookworm
+    - name: EL
+      versions:
+        - "9"
+dependencies: []

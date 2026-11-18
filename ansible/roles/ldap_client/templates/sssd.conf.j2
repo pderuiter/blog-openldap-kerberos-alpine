@@ -1,0 +1,24 @@
+# {{ ansible_managed }}
+[sssd]
+config_file_version = 2
+services = nss, pam, sudo, ssh
+domains = {{ ldap_client_sssd_domain }}
+
+[domain/{{ ldap_client_sssd_domain }}]
+id_provider = ldap
+auth_provider = krb5
+chpass_provider = krb5
+sudo_provider = ldap
+ldap_uri = {{ ldap_client_uris | join(', ') }}
+ldap_search_base = {{ ldap_base }}
+ldap_user_search_base = ou=People,{{ ldap_base }}
+ldap_group_search_base = ou=Groups,{{ ldap_base }}
+ldap_sudo_search_base = ou=SUDOers,{{ ldap_base }}
+ldap_schema = rfc2307
+ldap_tls_cacert = {{ ldap_client_ca_path }}
+ldap_tls_reqcert = demand
+ldap_user_ssh_public_key = sshPublicKey
+krb5_server = {{ ldap_servers | join(', ') }}
+krb5_realm = {{ krb_realm }}
+cache_credentials = true
+enumerate = false

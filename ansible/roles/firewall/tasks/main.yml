@@ -1,0 +1,19 @@
+---
+- name: Install nftables
+  community.general.apk:
+    name: nftables
+    state: present
+
+- name: Default-drop ruleset with the required ports
+  ansible.builtin.template:
+    src: nftables.nft.j2
+    dest: "{{ firewall_config }}"
+    mode: "0600"
+    validate: nft -c -f %s
+  notify: Reload nftables
+
+- name: Enable nftables
+  ansible.builtin.service:
+    name: nftables
+    state: started
+    enabled: true

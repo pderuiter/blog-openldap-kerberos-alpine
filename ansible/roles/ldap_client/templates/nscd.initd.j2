@@ -1,0 +1,19 @@
+#!/sbin/openrc-run
+# {{ ansible_managed }}
+# musl-nscd with hard dependencies: without them nscd starts before LDAP is
+# available, hangs on lookups and locks you out, console included.
+
+name="$SVCNAME"
+command="/usr/sbin/nscd"
+command_args="$NSCD_OPTS"
+pidfile="/run/$SVCNAME.pid"
+command_background=true
+
+depend() {
+    need {{ ldap_client_nscd_needs | join(' ') }}
+    after {{ ldap_client_nscd_needs | join(' ') }}
+}
+
+start_pre() {
+        mkdir -p /var/run/nscd
+}
