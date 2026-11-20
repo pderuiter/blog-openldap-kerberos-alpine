@@ -82,7 +82,7 @@ homeDirectory: /home/jdoe
 loginShell: /bin/bash
 sshPublicKey: ssh-ed25519 AAAA... jane@example.com
 EOF
-kadmin.local -q "addprinc jdoe@EXAMPLE.COM"
+kadmin.local -q "addprinc -x dn=uid=jdoe,ou=People,dc=example,dc=com jdoe@EXAMPLE.COM"
 ldapmodify -x -D "cn=admin,dc=example,dc=com" -W -H ldap://localhost <<EOF
 dn: cn=admins,ou=Groups,dc=example,dc=com
 changetype: modify
@@ -90,6 +90,10 @@ add: memberUid
 memberUid: jdoe
 EOF
 ```
+
+`-x dn=` puts the principal attributes on the user's own entry instead of a separate entry under
+`cn=EXAMPLE.COM,cn=krbContainer`. That works because the realm is created with `-subtrees ou=People,dc=example,dc=com`
+(`kerberos_principal_subtree`).
 
 The base role installs `bash`, because Alpine doesn't ship it and sshd refuses a user whose shell is missing.
 
